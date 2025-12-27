@@ -4,17 +4,40 @@ This guide walks you through setting up your development environment for the AI 
 
 ---
 
-## 1. Install uv (Python Package Manager)
+## 1. Create a New Folder
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
+mkdir agentic-workshop
 ```
 
 ---
 
-## 2. Create a New Project
+## 2. Open Cursor
 
-Open a new folder in Cursor, then initialize a Python project:
+Navigate to the folder and open Cursor:
+
+```bash
+cd agentic-workshop
+cursor .
+```
+
+---
+
+## 3. Open the Terminal in Cursor
+
+Press `Ctrl + `` (backtick) to open the integrated terminal.
+
+---
+
+## 4. Install uv (Python Package Manager)
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh
+```
+
+---
+
+## 5. Initialize a Python Project
 
 ```bash
 uv init
@@ -24,7 +47,7 @@ uv init
 
 ---
 
-## 3. Verify Setup
+## 6. Verify Setup
 
 Run the main.py file to verify everything works:
 
@@ -34,7 +57,7 @@ uv run main.py
 
 ---
 
-## 4. Configure Environment Variables
+## 7. Configure Environment Variables
 
 Create a `.env` file:
 

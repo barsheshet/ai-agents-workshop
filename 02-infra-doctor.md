@@ -1,48 +1,73 @@
-# 02 - Building an AI Agent with LangGraph: Infra Doctor
+# 02 - Building an AI Agent with create_agent: Infra Doctor
 
-This guide walks you through building the same **Site Reliability Engineer (SRE)** agent, but using **LangChain** and **LangGraph** instead of raw API calls.
+This guide walks you through building the same **Site Reliability Engineer (SRE)** agent using LangChain's `create_agent` - the simplest approach with minimal code.
+
+## How It Works (Flow Diagram)
+
+`create_agent` builds this graph internally:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        USER INPUT                           │
+│        "Investigate performance issues on prod-db-01"       │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                        ┌───────────┐
+                        │   agent   │  ◀──────────────┐
+                        │   (LLM)   │                 │
+                        └───────────┘                 │
+                              │                       │
+                              ▼                       │
+                    ┌─────────────────┐               │
+                    │   tool calls?   │               │
+                    └─────────────────┘               │
+                     /              \                 │
+                   YES               NO               │
+                   /                  \               │
+                  ▼                    ▼              │
+            ┌───────────┐        ┌───────────┐       │
+            │   tools   │        │    END    │       │
+            └───────────┘        └───────────┘       │
+                  │                                   │
+                  └───────────────────────────────────┘
+```
+
+---
 
 > **Prerequisites:** Complete [00-environment-setup.md](./00-environment-setup.md) first.
 
 Install dependencies:
 
 ```bash
-uv add langchain-openai langgraph python-dotenv
+uv add langchain-openai langchain python-dotenv
 ```
 
 ---
 
 ## Step 1: Import Libraries
 
-We import LangChain for the LLM and tools, and LangGraph for building the workflow graph.
-
 ```python
-import json
+# --- 1. Import Libraries ---
 import os
-from typing import Annotated, TypedDict
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
-from langchain_core.messages import HumanMessage, SystemMessage
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode, tools_condition
+from langchain.agents import create_agent
 ```
 
 **Key imports:**
 
-- `ChatOpenAI` - LLM client (works with OpenAI-compatible APIs)
-- `@tool` - Decorator to define tools
-- `StateGraph`, `START`, `END` - LangGraph components for building the workflow
-- `ToolNode`, `tools_condition` - Prebuilt components that handle tool execution and routing
+- `ChatOpenAI` - LLM client compatible with OpenAI API
+- `@tool` - Decorator to define tools with automatic schema generation
+- `create_agent` - Prebuilt agent that handles the entire ReAct loop
 
 ---
 
 ## Step 2: Load Environment Variables
 
-Load your API key from the `.env` file.
-
 ```python
+# --- 2. Load Environment Variables ---
 load_dotenv()
 ```
 
@@ -51,6 +76,7 @@ load_dotenv()
 ## Step 3: Setup API Configuration
 
 ```python
+# --- 3. Setup API Configuration ---
 API_KEY = os.environ.get("API_KEY", "")
 API_URL = "https://truefoundry.staging.sunbit.in/api/llm"
 MODEL = "vertex-staging/gemini-2-5-flash"
@@ -60,9 +86,10 @@ MODEL = "vertex-staging/gemini-2-5-flash"
 
 ## Step 4: Define the Tools
 
-With LangChain, we use the `@tool` decorator. It automatically generates the JSON schema from the function signature and docstring.
+Use the `@tool` decorator to define tools. The decorator automatically generates the JSON schema from the function signature and docstring.
 
 ```python
+# --- 4. Define the Tools ---
 @tool
 def check_cpu_usage(server_id: str) -> str:
     """Checks real-time CPU usage for a specific server."""
@@ -70,6 +97,7 @@ def check_cpu_usage(server_id: str) -> str:
     if server_id == "prod-db-01":
         return "CPU Load: 98% (CRITICAL)"
     return "CPU Load: 45% (NORMAL)"
+
 
 @tool
 def check_application_logs(server_id: str) -> str:
@@ -79,148 +107,78 @@ def check_application_logs(server_id: str) -> str:
         return "Log: 'Connection pool exhausted', 'Timeout waiting for connection'"
     return "No critical errors found."
 
+
 tools = [check_cpu_usage, check_application_logs]
 ```
 
-**Key Points:**
-
-- The `@tool` decorator replaces the manual `tools_schema` JSON
-- The docstring becomes the tool's `description`
-- Type hints become the parameter schema
-
 ---
 
-## Step 5: Setup LLM with Tools
+## Step 5: Setup LLM
 
-Create the LLM client and bind the tools to it.
+Create the LLM client. No need to bind tools manually - `create_agent` handles this automatically.
 
 ```python
+# --- 5. Setup LLM ---
 llm = ChatOpenAI(model=MODEL, api_key=API_KEY, base_url=API_URL)
-llm_with_tools = llm.bind_tools(tools)
 ```
-
-**Key Points:**
-
-- `ChatOpenAI` works with any OpenAI-compatible endpoint via `base_url`
-- `bind_tools()` tells the LLM what tools are available
 
 ---
 
-## Step 6: Define the State
+## Step 6: Create the Agent
 
-The state holds all data passed between nodes. We use `add_messages` to automatically handle appending messages.
+This is where the magic happens. One function call creates the entire agent.
 
 ```python
-class State(TypedDict):
-    # 'add_messages' automatically appends new messages to history
-    messages: Annotated[list, add_messages]
+# --- 6. Create the Agent ---
+agent = create_agent(
+    model=llm,
+    tools=tools,
+    system_prompt="You are a senior site reliability engineer. Diagnose issues efficiently.",
+)
 ```
 
-**Key Points:**
+**What `create_agent` does automatically:**
 
-- `Annotated[list, add_messages]` tells LangGraph how to merge message updates
-- No need to manually do `state["messages"] + [new_message]`
+- Binds tools to the LLM
+- Creates the state management
+- Sets up the LLM node
+- Sets up the tool execution node
+- Configures the routing logic
+- Compiles the graph
 
 ---
 
-## Step 7: Define Nodes
-
-We only need to define one custom node (the LLM). The tool execution uses a prebuilt `ToolNode`.
+## Step 7: Run the Agent
 
 ```python
-def llm_node(state):
-    """Call the LLM."""
-    print("[LLM] Calling LLM...\n")
-    return {"messages": [llm_with_tools.invoke(state["messages"])]}
-
-# Prebuilt node that executes tools automatically
-tool_node = ToolNode(tools)
-```
-
-**Key Points:**
-
-- `llm_node` just returns the new message (not the full list, thanks to `add_messages`)
-- `ToolNode(tools)` creates a node that automatically:
-  - Reads tool calls from the last message
-  - Executes the matching tools
-  - Returns the results as `ToolMessage` objects
-
----
-
-## Step 8: Build the Graph
-
-Now we connect everything using the prebuilt `tools_condition` for routing.
-
-```python
-#
-#   START ──▶ llm ──▶ tools_condition? ──▶ END
-#              ▲            │
-#              │           tools
-#              │            │
-#              └────────────┘
-#
-graph = StateGraph(State)
-
-graph.add_node("llm", llm_node)
-graph.add_node("tools", tool_node)
-
-graph.add_edge(START, "llm")
-graph.add_conditional_edges("llm", tools_condition)  # Prebuilt routing logic
-graph.add_edge("tools", "llm")
-
-agent = graph.compile()
-```
-
-**Key Points:**
-
-- `add_node()` - Registers a node function
-- `add_edge()` - Creates a fixed path between nodes
-- `tools_condition` - Prebuilt function that routes to `"tools"` if tool calls exist, otherwise to `END`
-- `compile()` - Finalizes the graph into a runnable agent
-
----
-
-## Step 9: Run the Agent
-
-```python
+# --- 7. Run the Agent ---
 def run_agent(user_input: str):
     print(f"\n[AGENT] Started with query: {user_input}\n")
 
-    initial_state = {
-        "messages": [
-            SystemMessage(content="You are a senior site reliability engineer. Diagnose issues efficiently."),
-            HumanMessage(content=user_input),
-        ]
-    }
-
-    final_state = agent.invoke(initial_state)
+    result = agent.invoke({"messages": [("user", user_input)]})
 
     # Print final response
-    print(f"[AGENT] Final response:\n{final_state['messages'][-1].content}\n")
+    print(f"[AGENT] Final response:\n{result['messages'][-1].content}\n")
 
-    # Print conversation history
-    print("[AGENT] Conversation history:")
-    history = []
-    for m in final_state["messages"]:
-        entry = {"role": m.type, "content": m.content}
-        if hasattr(m, "tool_calls") and m.tool_calls:
-            entry["tool_calls"] = m.tool_calls
-        history.append(entry)
-    print(json.dumps(history, indent=2))
-    print()
+    # Debug the conversation history
+    # print("[DEBUG] Conversation history:")
+    # for msg in result["messages"]:
+    #     msg.pretty_print()
+    # print()
 ```
 
 **Key Points:**
 
-- We use LangChain message types (`SystemMessage`, `HumanMessage`)
-- `agent.invoke()` runs the entire graph until it reaches `END`
-- The final state contains all messages from the conversation
+- Input is just `{"messages": [("user", user_input)]}`
+- `agent.invoke()` runs the entire loop until completion
+- Result contains all messages from the conversation
 
 ---
 
-## Step 10: Run It
+## Step 8: Run It
 
 ```python
+# --- 8. Run It ---
 if __name__ == "__main__":
     if not API_KEY:
         print("Error: API_KEY not set.")
@@ -235,90 +193,3 @@ uv run 02-infra-doctor.py
 ```
 
 ---
-
-## How It Works (Flow Diagram)
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        USER INPUT                           │
-│        "Investigate performance issues on prod-db-01"       │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-                        ┌───────────┐
-                        │   START   │
-                        └───────────┘
-                              │
-                              ▼
-                        ┌───────────┐
-                        │    llm    │  ◀──────────────┐
-                        └───────────┘                 │
-                              │                       │
-                              ▼                       │
-                    ┌─────────────────┐               │
-                    │ tools_condition │               │
-                    └─────────────────┘               │
-                     /              \                 │
-              has tools?         no tools             │
-                   /                  \               │
-                  ▼                    ▼              │
-            ┌───────────┐        ┌───────────┐       │
-            │   tools   │        │    END    │       │
-            │ (ToolNode)│        └───────────┘       │
-            └───────────┘                             │
-                  │                                   │
-                  └───────────────────────────────────┘
-```
-
----
-
-## Comparison: Manual vs LangGraph
-
-| Aspect         | Manual (`01-infra-doctor.py`) | LangGraph (`02-infra-doctor.py`)   |
-| -------------- | ----------------------------- | ---------------------------------- |
-| LLM Call       | Raw HTTP with `requests`      | `ChatOpenAI` client                |
-| Tool Schema    | Manual JSON definition        | `@tool` decorator (auto-generated) |
-| Agent Loop     | `while True` loop             | Graph with nodes and edges         |
-| State          | `messages` list               | `State` with `add_messages`        |
-| Flow Control   | `if/else` statements          | `tools_condition` (prebuilt)       |
-| Tool Execution | Manual lookup and call        | `ToolNode` (prebuilt)              |
-
----
-
-## What the Prebuilt Components Do
-
-### `ToolNode(tools)`
-
-Replaces this manual code:
-
-```python
-def tools_node(state):
-    last_message = state["messages"][-1]
-    results = []
-    for tool_call in last_message.tool_calls:
-        tool_fn = {t.name: t for t in tools}[tool_call["name"]]
-        result = tool_fn.invoke(tool_call["args"])
-        results.append(ToolMessage(content=result, tool_call_id=tool_call["id"]))
-    return {"messages": results}
-```
-
-### `tools_condition`
-
-Replaces this manual code:
-
-```python
-def should_continue(state):
-    last_message = state["messages"][-1]
-    if last_message.tool_calls:
-        return "tools"
-    return END
-```
-
-### `add_messages`
-
-Replaces manual message appending:
-
-```python
-# Before: return {"messages": state["messages"] + [response]}
-# After:  return {"messages": [response]}  # add_messages handles appending
-```
