@@ -49,6 +49,18 @@ uv add requests python-dotenv
 
 ---
 
+## Step 0: Create the Python File
+
+Create a new file called `01-infra-doctor.py`:
+
+```bash
+touch 01-infra-doctor.py
+```
+
+Open the file in Cursor and follow the steps below.
+
+---
+
 ## Step 1: Import Libraries
 
 ```python

@@ -66,7 +66,19 @@ uv add langchain-openai langchain-community langchain-text-splitters langgraph p
 
 ---
 
-## Step 0: Configure Confluence Cookie
+## Step 0a: Create the Python File
+
+Create a new file called `03-rag-agent.py`:
+
+```bash
+touch 03-rag-agent.py
+```
+
+Open the file in Cursor and follow the steps below.
+
+---
+
+## Step 0b: Configure Confluence Cookie
 
 To access Sunbit's Confluence wiki, you need to extract the session cookie:
 
