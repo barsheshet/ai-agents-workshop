@@ -32,7 +32,7 @@ Press `Ctrl + `` (backtick) to open the integrated terminal.
 ## 4. Install uv (Python Package Manager)
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ---
