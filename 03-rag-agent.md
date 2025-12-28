@@ -61,7 +61,7 @@ This guide walks you through building a **Retrieval-Augmented Generation (RAG)**
 Install dependencies:
 
 ```bash
-uv add langchain-openai langchain-community langchain-text-splitters langgraph python-dotenv
+uv add langchain-openai langchain-community langchain-text-splitters langgraph python-dotenv beautifulsoup4
 ```
 
 ---
@@ -175,7 +175,10 @@ for url in urls:
     try:
         docs.extend(
             WebBaseLoader(
-                url, requests_kwargs={"headers": {"Cookie": CONFLUENCE_COOKIE}}
+                url,
+                requests_kwargs={
+                    "headers": {"Cookie": f"tenant.session.token={CONFLUENCE_COOKIE}"}
+                },
             ).load()
         )
     except Exception as e:
