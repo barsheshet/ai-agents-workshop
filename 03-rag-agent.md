@@ -141,7 +141,6 @@ load_dotenv()
 # 3. setup API configuration
 API_KEY = os.environ.get("API_KEY", "")
 CONFLUENCE_COOKIE = os.environ.get("CONFLUENCE_COOKIE", "")
-print(f"CONFLUENCE_COOKIE: {CONFLUENCE_COOKIE}")
 API_URL = "https://truefoundry.staging.sunbit.in/api/llm"  # API URL
 MODEL = "vertex-staging/gemini-2-5-flash"  # LLM
 EMBEDDING_MODEL = "vertex-staging/gemini-embedding-001"  # Embeddings
