@@ -215,8 +215,11 @@ def run_agent(user_input: str):
         response = call_llm(
             {"model": MODEL, "messages": messages, "tools": tools_schema}
         )
-        messages.append(response["choices"][0]["message"])
-        last_message = messages[-1]
+
+        last_message = response["choices"][0]["message"]
+
+        messages.append(last_message)
+
         tool_calls = last_message.get("tool_calls")
         content = last_message.get("content")
 
